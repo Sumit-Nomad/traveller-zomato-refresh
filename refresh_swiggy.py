@@ -121,6 +121,13 @@ def main():
     if ok_frac < float(os.environ.get("MIN_OK", "0.9")) or live == 0:
         print("Too many failures; not uploading so existing dashboard data is kept.")
         return 1
+    min_live = int(os.environ.get("MIN_LIVE", "200"))
+    min_rows = int(os.environ.get("MIN_ROWS", "35000"))
+    if live < min_live or len(menu) < min_rows:
+        print(f"Only {live} live outlets / {len(menu)} menu rows (expected at least {min_live} / "
+              f"{min_rows}); the site may be serving empty pages. Not uploading so existing "
+              "dashboard data is kept.")
+        return 1
     reply = post_dashboard({"key": os.environ["INGEST_KEY"], "platform": "swiggy",
                             "menu": menu, "ratings": ratings})
     print("upload reply:", json.dumps(reply)[:300])
