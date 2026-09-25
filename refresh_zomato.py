@@ -61,7 +61,10 @@ def city_of(url):
 
 
 def fetch(url):
-    req = urllib.request.Request(url.rstrip("/") + "/order", headers={"User-Agent": UA})
+    base = url.rstrip("/")
+    if not base.endswith("/order"):
+        base += "/order"
+    req = urllib.request.Request(base, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=40) as resp:
         return resp.status, resp.read().decode("utf-8", errors="ignore")
 
