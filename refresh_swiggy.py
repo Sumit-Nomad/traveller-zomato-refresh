@@ -38,8 +38,17 @@ def fetch_menu(rid):
         return json.loads(resp.read().decode("utf-8"))
 
 
-def veg_type(v):
-    return "veg" if v in (1, "1", True) else "non-veg" if v in (0, "0", False) else "na"
+def veg_type(info):
+    """Swiggy marks veg items with isVeg=1 and leaves it out for non-veg, so use the
+    itemAttribute.vegClassifier field first."""
+    c = str(((info.get("itemAttribute") or {}).get("vegClassifier")) or "").upper().replace("_", "").replace("-", "")
+    if c == "VEG":
+        return "veg"
+    if c == "NONVEG":
+        return "non-veg"
+    if c == "EGG":
+        return "egg"
+    return "veg" if info.get("isVeg") in (1, "1", True) else "na"
 
 
 def status_of(info, n_items):
@@ -81,7 +90,7 @@ def extract(j):
                     continue
                 category = (i.get("category") or cat.get("title") or inner.get("title") or "")
                 items.append((category.strip().rstrip(".").strip() or "Uncategorized",
-                              i["name"].strip(), veg_type(i.get("isVeg"))))
+                              i["name"].strip(), veg_type(i)))
     return rating, total, items, status_of(info, len(items))
 
 
