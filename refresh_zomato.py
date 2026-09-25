@@ -110,6 +110,11 @@ def main():
     if frac < float(os.environ.get("MIN_OK", "0.9")):
         print("Too many failures; not uploading so existing dashboard data is kept.")
         return 1
+    min_rows = int(os.environ.get("MIN_ROWS", "25000"))
+    if len(menu) < min_rows:
+        print(f"Only {len(menu)} menu rows (expected at least {min_rows}); the site may be "
+              "serving empty pages. Not uploading so existing dashboard data is kept.")
+        return 1
 
     url, key = os.environ["INGEST_URL"], os.environ["INGEST_KEY"]
     body = json.dumps({"key": key, "platform": "zomato", "menu": menu, "ratings": ratings}).encode()
