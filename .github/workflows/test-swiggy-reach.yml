@@ -1,0 +1,17 @@
+name: Test Swiggy reachability
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe Swiggy services without any login
+        run: |
+          probe() { echo "== $1"; curl -s -m 25 -o /tmp/o.txt -w "HTTP %{http_code}\n" -X "$2" -H "Content-Type: application/json" -A "Mozilla/5.0" ${3:+-d "$3"} "$1"; head -c 200 /tmp/o.txt; echo; }
+          probe https://vhc-composer.swiggy.com/query POST '{}'
+          probe https://rms.swiggy.com/api/v1/fetchConfig GET
+          probe https://rms.swiggy.com/restaurant/availability/v2 POST '{}'
+          probe "https://www.swiggy.com/dapi/menu/pl?page-type=REGULAR_MENU&complete-menu=true&lat=28.6327&lng=77.2198&restaurantId=573917" GET
