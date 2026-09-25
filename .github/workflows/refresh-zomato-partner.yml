@@ -1,0 +1,25 @@
+name: Refresh Zomato partner status
+
+on:
+  schedule:
+    - cron: "10,40 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: refresh-zomato-partner
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Read Zomato partner status and upload it to the dashboard
+        env:
+          INGEST_URL: ${{ secrets.INGEST_URL }}
+          INGEST_KEY: ${{ secrets.INGEST_KEY }}
+        run: python refresh_zomato_partner.py
