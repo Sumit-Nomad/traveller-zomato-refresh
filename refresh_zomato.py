@@ -35,6 +35,27 @@ RATING_RE = re.compile(
 )
 
 
+def field(page, key):
+    m = re.search(r'\\?"' + key + r'\\?":\s*\\?"?([^,}\\"]*)', page)
+    return m.group(1).strip() if m else ""
+
+
+def page_status(page, n_items):
+    """-> (state, reason) from the outlet's own Zomato page."""
+    if n_items == 0:
+        return "closed", "No menu on the Zomato link"
+    if field(page, "is_perm_closed") == "true":
+        return "closed", "Permanently closed"
+    if field(page, "is_temp_closed") == "true":
+        return "closed", "Temporarily closed"
+    text = field(page, "res_status_text")
+    hours = field(page, "openingHours")
+    low = text.lower()
+    if "clos" in low or "not available" in low or "not accepting" in low:
+        return "closed", (text + (" · " + hours if hours else "")).strip() or "Closed"
+    return "live", text or "Open"
+
+
 def city_of(url):
     m = re.match(r"https://www\.zomato\.com/([^/]+)/", url)
     slug = m.group(1) if m else "other"
@@ -73,11 +94,12 @@ def work(o):
                 raise RuntimeError(f"HTTP {status}")
             m = RATING_RE.search(page)
             rating = (m.group(1) or None, m.group(2).rstrip(",")) if m else (None, None)
-            return o, parse_items(page), rating, None
+            items = parse_items(page)
+            return o, items, rating, None, page_status(page, len(items))
         except Exception as e:  # noqa: BLE001
             err = str(e)
             time.sleep((12 if "429" in err else 2) * (attempt + 1))
-    return o, [], (None, None), err
+    return o, [], (None, None), err, ("closed", "Could not read the page")
 
 
 def main():
@@ -86,12 +108,13 @@ def main():
     with ThreadPoolExecutor(max_workers=3) as ex:
         results = list(ex.map(work, outlets))
 
-    menu, ratings, ok, failed = [], [], 0, []
-    for o, items, (rating, votes), err in results:
+    menu, ratings, statuses, ok, failed = [], [], [], 0, []
+    for o, items, (rating, votes), err, status in results:
         if err:
             failed.append(f"{o['brand']}/{o['outlet']}: {err}")
             continue
         ok += 1
+        statuses.append([o["brand"], o["outlet"], status[0], status[1]])
         c = city_of(o["url"])
         for cat, name, typ in items:
             menu.append([o["brand"], o["outlet"], c, cat, name, typ])
@@ -99,8 +122,9 @@ def main():
             ratings.append([o["brand"], o["outlet"], rating, votes or ""])
 
     frac = ok / len(outlets)
+    live_n = sum(1 for s in statuses if s[2] == "live")
     print(f"fetched {ok}/{len(outlets)} outlets ({frac:.0%}) in {time.time()-started:.0f}s; "
-          f"{len(menu)} menu rows, {len(ratings)} ratings")
+          f"{len(menu)} menu rows, {len(ratings)} ratings; {live_n} live / {len(statuses)-live_n} closed")
     for f in failed[:10]:
         print("  FAILED", f)
 
@@ -117,7 +141,8 @@ def main():
         return 1
 
     url, key = os.environ["INGEST_URL"], os.environ["INGEST_KEY"]
-    body = json.dumps({"key": key, "platform": "zomato", "menu": menu, "ratings": ratings}).encode()
+    body = json.dumps({"key": key, "platform": "zomato", "menu": menu, "ratings": ratings,
+                       "status": statuses}).encode()
     req = urllib.request.Request(url, data=body, headers={"Content-Type": "text/plain"})
     with urllib.request.urlopen(req, timeout=180) as resp:
         reply = resp.read().decode()
