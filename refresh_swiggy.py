@@ -42,11 +42,23 @@ def veg_type(v):
     return "veg" if v in (1, "1", True) else "non-veg" if v in (0, "0", False) else "na"
 
 
+def status_of(info, n_items):
+    """-> (state, reason) from the outlet's own Swiggy link."""
+    if n_items == 0:
+        return "closed", "No menu on the Swiggy link"
+    t = (info or {}).get("timingsInfo") or {}
+    st = (t.get("status") or "").strip()
+    msg = (t.get("message") or "").strip()
+    if st.lower().startswith("clos"):
+        return "closed", ("Closed · " + msg).strip(" ·")
+    return "live", (st + (" · " + msg if msg else "")).strip() or "Open"
+
+
 def extract(j):
-    """-> (rating, total_ratings, [(category, item, type)]) ; empty when the store has no live menu."""
+    """-> (rating, total_ratings, items, (state, reason)); items empty when the store has no live menu."""
     cards = (j.get("data") or {}).get("cards") or []
     if j.get("statusCode") != 0 or not cards:
-        return None, None, []
+        return None, None, [], ("closed", "No menu on the Swiggy link")
     info = None
     for c in cards:
         inner = (c.get("card") or {}).get("card")
@@ -71,7 +83,7 @@ def extract(j):
                 category = (i.get("category") or cat.get("title") or inner.get("title") or "")
                 items.append((category.strip().rstrip(".").strip() or "Uncategorized",
                               i["name"].strip(), veg_type(i.get("isVeg"))))
-    return rating, total, items
+    return rating, total, items, status_of(info, len(items))
 
 
 def work(p):
@@ -83,7 +95,7 @@ def work(p):
         except Exception as e:  # noqa: BLE001
             err = str(e)
             time.sleep((10 if "429" in err else 3) * (attempt + 1))
-    return p, (None, None, []), err
+    return p, (None, None, [], ("closed", "Could not read the link")), err
 
 
 def main():
@@ -96,13 +108,14 @@ def main():
     with ThreadPoolExecutor(max_workers=2) as ex:
         results = list(ex.map(work, pairs))
 
-    menu, ratings, failed, live = [], [], [], 0
-    for p, (rating, total, items), err in results:
+    menu, ratings, statuses, failed, live = [], [], [], [], 0
+    for p, (rating, total, items, status), err in results:
         if err:
             failed.append(f"{p['brand']}/{p['outlet']}: {err}")
             continue
+        statuses.append([p["brand"], p["outlet"], status[0], status[1]])
         if not items:
-            continue  # store not orderable on Swiggy right now
+            continue  # no menu on the link
         live += 1
         for cat, name, typ in items:
             menu.append([p["brand"], p["outlet"], cat, name, typ])
@@ -110,8 +123,10 @@ def main():
             ratings.append([p["brand"], p["outlet"], rating, total or ""])
 
     ok_frac = 1 - len(failed) / len(pairs)
-    print(f"{len(pairs)} outlets: {live} live, {len(pairs) - live - len(failed)} not orderable, "
-          f"{len(failed)} errors; {len(menu)} menu rows, {len(ratings)} ratings in {time.time()-started:.0f}s")
+    open_n = sum(1 for x in statuses if x[2] == "live")
+    print(f"{len(pairs)} outlets: {live} with a menu, {len(pairs) - live - len(failed)} without, "
+          f"{len(failed)} errors; {open_n} open now / {len(statuses) - open_n} closed; "
+          f"{len(menu)} menu rows, {len(ratings)} ratings in {time.time()-started:.0f}s")
     for f in failed[:10]:
         print("  FAILED", f)
 
@@ -129,7 +144,7 @@ def main():
               "dashboard data is kept.")
         return 1
     reply = post_dashboard({"key": os.environ["INGEST_KEY"], "platform": "swiggy",
-                            "menu": menu, "ratings": ratings})
+                            "menu": menu, "ratings": ratings, "status": statuses})
     print("upload reply:", json.dumps(reply)[:300])
     return 0 if reply.get("ok") else 1
 
