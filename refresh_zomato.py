@@ -48,12 +48,10 @@ def page_status(page, n_items):
         return "closed", "Permanently closed"
     if field(page, "is_temp_closed") == "true":
         return "closed", "Temporarily closed"
-    text = field(page, "res_status_text")
-    hours = field(page, "openingHours")
-    low = text.lower()
+    low = field(page, "res_status_text").lower()
     if "clos" in low or "not available" in low or "not accepting" in low:
-        return "closed", (text + (" · " + hours if hours else "")).strip() or "Closed"
-    return "live", text or "Open"
+        return "closed", "Offline now"
+    return "live", "Live now"
 
 
 def city_of(url):
