@@ -45,20 +45,19 @@ def veg_type(v):
 def status_of(info, n_items):
     """-> (state, reason) from the outlet's own Swiggy link."""
     if n_items == 0:
-        return "closed", "No menu on the Swiggy link"
+        return "closed", "Disabled on Swiggy"
     t = (info or {}).get("timingsInfo") or {}
     st = (t.get("status") or "").strip()
-    msg = (t.get("message") or "").strip()
     if st.lower().startswith("clos"):
-        return "closed", ("Closed · " + msg).strip(" ·")
-    return "live", (st + (" · " + msg if msg else "")).strip() or "Open"
+        return "closed", "Offline now"
+    return "live", "Live now"
 
 
 def extract(j):
     """-> (rating, total_ratings, items, (state, reason)); items empty when the store has no live menu."""
     cards = (j.get("data") or {}).get("cards") or []
     if j.get("statusCode") != 0 or not cards:
-        return None, None, [], ("closed", "No menu on the Swiggy link")
+        return None, None, [], ("closed", "Disabled on Swiggy")
     info = None
     for c in cards:
         inner = (c.get("card") or {}).get("card")
