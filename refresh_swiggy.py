@@ -122,6 +122,12 @@ def main():
     pairs = reply["pairs"]
     with ThreadPoolExecutor(max_workers=2) as ex:
         results = list(ex.map(work, pairs))
+    # second, slower pass over anything that failed
+    for i, r in enumerate(results):
+        if r[2]:
+            time.sleep(5)
+            results[i] = work(pairs[i])
+    keep = [[p["brand"], p["outlet"]] for p, _res, err in results if err]
 
     menu, ratings, statuses, failed, live = [], [], [], [], 0
     for p, (rating, total, items, status), err in results:
@@ -140,7 +146,7 @@ def main():
     ok_frac = 1 - len(failed) / len(pairs)
     open_n = sum(1 for x in statuses if x[2] == "live")
     print(f"{len(pairs)} outlets: {live} with a menu, {len(pairs) - live - len(failed)} without, "
-          f"{len(failed)} errors; {open_n} open now / {len(statuses) - open_n} closed; "
+          f"{len(failed)} errors (kept from previous data); {open_n} open now / {len(statuses) - open_n} closed; "
           f"{len(menu)} menu rows, {len(ratings)} ratings in {time.time()-started:.0f}s")
     for f in failed[:10]:
         print("  FAILED", f)
@@ -159,7 +165,8 @@ def main():
               "dashboard data is kept.")
         return 1
     reply = post_dashboard({"key": os.environ["INGEST_KEY"], "platform": "swiggy",
-                            "menu": menu, "ratings": ratings, "status": statuses})
+                            "menu": menu, "ratings": ratings, "status": statuses,
+                            "keep": keep})
     print("upload reply:", json.dumps(reply)[:300])
     return 0 if reply.get("ok") else 1
 
