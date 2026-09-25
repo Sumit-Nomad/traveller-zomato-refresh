@@ -25,6 +25,7 @@ CITY_LABELS = {
 }
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+NON_ITEMS = {"Report an error in this listing"}
 H4_RE = re.compile(r"<h4[^>]*>([^<]+)</h4>")
 SECTION_RE = re.compile(r"<section[^>]*>")
 TYPE_RE = re.compile(r'<div type="(veg|non-veg|egg)"')
@@ -74,6 +75,8 @@ def parse_items(page):
     cats, items = [], []
     for m in H4_RE.finditer(page):
         pos, name = m.start(), htmlmod.unescape(m.group(1)).strip()
+        if name in NON_ITEMS:
+            continue
         (cats if any(0 <= pos - s <= 80 for s in sections) else items).append((pos, name))
     types = [m.group(1) for m in TYPE_RE.finditer(page)]
     out, ci = [], 0
@@ -144,9 +147,18 @@ def main():
     url, key = os.environ["INGEST_URL"], os.environ["INGEST_KEY"]
     body = json.dumps({"key": key, "platform": "zomato", "menu": menu, "ratings": ratings,
                        "status": statuses}).encode()
-    req = urllib.request.Request(url, data=body, headers={"Content-Type": "text/plain"})
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        reply = resp.read().decode()
+    reply = ""
+    for attempt in range(4):
+        try:
+            req = urllib.request.Request(url, data=body, headers={"Content-Type": "text/plain"})
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                reply = resp.read().decode()
+            break
+        except Exception as e:  # noqa: BLE001
+            print(f"upload attempt {attempt + 1} failed: {e}")
+            if attempt == 3:
+                raise
+            time.sleep(20 * (attempt + 1))
     print("upload reply:", reply[:300])
     return 0 if '"ok":true' in reply.replace(" ", "") else 1
 
