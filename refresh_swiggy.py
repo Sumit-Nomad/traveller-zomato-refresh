@@ -27,9 +27,16 @@ REST_TYPE = "type.googleapis.com/swiggy.presentation.food.v2.Restaurant"
 def post_dashboard(payload):
     url = os.environ["INGEST_URL"]
     body = json.dumps(payload).encode()
-    req = urllib.request.Request(url, data=body, headers={"Content-Type": "text/plain"})
-    with urllib.request.urlopen(req, timeout=180) as resp:
-        return json.loads(resp.read().decode())
+    for attempt in range(4):
+        try:
+            req = urllib.request.Request(url, data=body, headers={"Content-Type": "text/plain"})
+            with urllib.request.urlopen(req, timeout=180) as resp:
+                return json.loads(resp.read().decode())
+        except Exception as e:  # noqa: BLE001
+            print(f"dashboard call attempt {attempt + 1} failed: {e}")
+            if attempt == 3:
+                raise
+            time.sleep(20 * (attempt + 1))
 
 
 def fetch_menu(rid):
