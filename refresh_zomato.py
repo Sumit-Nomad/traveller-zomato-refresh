@@ -41,6 +41,11 @@ def field(page, key):
     return m.group(1).strip() if m else ""
 
 
+def page_codes(page):
+    """Zomato's own onlineStatusCode / statusReasonCode for this outlet (raw, recorded for audit)."""
+    return field(page, "onlineStatusCode"), field(page, "statusReasonCode")
+
+
 def page_res_id(page):
     """The res_id Zomato itself embeds in the page, as an int (or None)."""
     raw = field(page, "res_id")
@@ -113,11 +118,11 @@ def work(o):
             # quietly started pointing somewhere else.
             expected = o.get("res_id")
             verified = expected is not None and page_res_id(page) == expected
-            return o, items, rating, None, page_status(page, len(items)), verified
+            return o, items, rating, None, page_status(page, len(items)), verified, page_codes(page)
         except Exception as e:  # noqa: BLE001
             err = str(e)
             time.sleep((12 if "429" in err else 2) * (attempt + 1))
-    return o, [], (None, None), err, ("closed", "Could not read the page"), False
+    return o, [], (None, None), err, ("closed", "Could not read the page"), False, ("", "")
 
 
 def load_outlets():
@@ -144,19 +149,19 @@ def main():
             results[i] = work(outlets[i])
 
     menu, ratings, statuses, ok, failed = [], [], [], 0, []
-    for o, items, (rating, votes), err, status, verified in results:
+    for o, items, (rating, votes), err, status, verified, codes in results:
         if err:
             failed.append(f"{o['brand']}/{o['outlet']}: {err}")
             continue
         ok += 1
-        statuses.append([o["brand"], o["outlet"], status[0], status[1], "Y" if verified else "N"])
+        statuses.append([o["brand"], o["outlet"], status[0], status[1], "Y" if verified else "N", codes[0], codes[1]])
         c = city_of(o["url"])
         for cat, name, typ in items:
             menu.append([o["brand"], o["outlet"], c, cat, name, typ])
         if rating:
             ratings.append([o["brand"], o["outlet"], rating, votes or ""])
 
-    keep = [[o["brand"], o["outlet"]] for o, _items, _r, err, _s, _v in results if err]
+    keep = [[o["brand"], o["outlet"]] for o, _items, _r, err, _s, _v, _c in results if err]
     frac = ok / len(outlets)
     live_n = sum(1 for s in statuses if s[2] == "live")
     verified_n = sum(1 for s in statuses if s[4] == "Y")
