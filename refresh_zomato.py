@@ -41,6 +41,12 @@ def field(page, key):
     return m.group(1).strip() if m else ""
 
 
+def page_res_id(page):
+    """The res_id Zomato itself embeds in the page, as an int (or None)."""
+    raw = field(page, "res_id")
+    return int(raw) if raw.isdigit() else None
+
+
 def page_status(page, n_items):
     """-> (state, reason) from the outlet's own Zomato page."""
     if n_items == 0:
@@ -99,15 +105,35 @@ def work(o):
             m = RATING_RE.search(page)
             rating = (m.group(1) or None, m.group(2).rstrip(",")) if m else (None, None)
             items = parse_items(page)
-            return o, items, rating, None, page_status(page, len(items))
+            # Outlets are matched by name/URL slug, which is ambiguous (Zomato
+            # slugs get reused or redirected); res_id is the one unambiguous key.
+            # Only trust this page's status as "verified" when the res_id the
+            # page itself reports matches the res_id we recorded for this
+            # outlet+brand (zomato_res_ids.json) - otherwise the URL may have
+            # quietly started pointing somewhere else.
+            expected = o.get("res_id")
+            verified = expected is not None and page_res_id(page) == expected
+            return o, items, rating, None, page_status(page, len(items)), verified
         except Exception as e:  # noqa: BLE001
             err = str(e)
             time.sleep((12 if "429" in err else 2) * (attempt + 1))
-    return o, [], (None, None), err, ("closed", "Could not read the page")
+    return o, [], (None, None), err, ("closed", "Could not read the page"), False
+
+
+def load_outlets():
+    outlets = json.load(open(os.path.join(os.path.dirname(__file__), "zomato_outlet_links.json")))
+    resid_path = os.path.join(os.path.dirname(__file__), "zomato_res_ids.json")
+    resid_map = {}
+    if os.path.exists(resid_path):
+        for r in json.load(open(resid_path)):
+            resid_map[(r["brand"], r["outlet"])] = r.get("res_id")
+    for o in outlets:
+        o["res_id"] = resid_map.get((o["brand"], o["outlet"]))
+    return outlets
 
 
 def main():
-    outlets = json.load(open(os.path.join(os.path.dirname(__file__), "zomato_outlet_links.json")))
+    outlets = load_outlets()
     started = time.time()
     with ThreadPoolExecutor(max_workers=3) as ex:
         results = list(ex.map(work, outlets))
@@ -118,23 +144,27 @@ def main():
             results[i] = work(outlets[i])
 
     menu, ratings, statuses, ok, failed = [], [], [], 0, []
-    for o, items, (rating, votes), err, status in results:
+    for o, items, (rating, votes), err, status, verified in results:
         if err:
             failed.append(f"{o['brand']}/{o['outlet']}: {err}")
             continue
         ok += 1
-        statuses.append([o["brand"], o["outlet"], status[0], status[1]])
+        statuses.append([o["brand"], o["outlet"], status[0], status[1], "Y" if verified else "N"])
         c = city_of(o["url"])
         for cat, name, typ in items:
             menu.append([o["brand"], o["outlet"], c, cat, name, typ])
         if rating:
             ratings.append([o["brand"], o["outlet"], rating, votes or ""])
 
-    keep = [[o["brand"], o["outlet"]] for o, _items, _r, err, _s in results if err]
+    keep = [[o["brand"], o["outlet"]] for o, _items, _r, err, _s, _v in results if err]
     frac = ok / len(outlets)
     live_n = sum(1 for s in statuses if s[2] == "live")
+    verified_n = sum(1 for s in statuses if s[4] == "Y")
+    no_resid = sum(1 for o in outlets if o.get("res_id") is None)
     print(f"fetched {ok}/{len(outlets)} outlets ({frac:.0%}) in {time.time()-started:.0f}s; "
-          f"{len(menu)} menu rows, {len(ratings)} ratings; {live_n} live / {len(statuses)-live_n} closed; {len(keep)} kept from previous data")
+          f"{len(menu)} menu rows, {len(ratings)} ratings; {live_n} live / {len(statuses)-live_n} closed; "
+          f"{len(keep)} kept from previous data; {verified_n}/{len(statuses)} res_id-verified "
+          f"({no_resid} outlets have no known res_id)")
     for f in failed[:10]:
         print("  FAILED", f)
 
