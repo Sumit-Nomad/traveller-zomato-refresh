@@ -68,10 +68,12 @@ def login_and_get_token(page):
     the bearer token Atlas sends to its own API. UrbanPiper's login is a few separate
     screens (identifier, then password, then sometimes a business picker), not one form."""
     token = {}
+    seen = []  # every graphql request's auth header, for diagnostics if we never get a real one
 
     def on_request(req):
         if GRAPHQL_URL in req.url:
             auth = req.headers.get("authorization")
+            seen.append(auth)
             # Before login completes the app fires GraphQL calls with a literal
             # "authorization: null" placeholder header - confirmed live in a failed
             # run (token came back as the 4-character string "null"). Only a real
@@ -161,6 +163,7 @@ def login_and_get_token(page):
         atlas_app = page.get_by_role("button", name="Atlas", exact=False)
         atlas_app.wait_for(state="visible", timeout=15000)
         atlas_app.click()
+        print("DIAG: clicked the 'Atlas' app tile")
     except Exception as e:
         print(f"DIAG: could not find/click the 'Atlas' app tile ({e})")
         try:
@@ -171,6 +174,7 @@ def login_and_get_token(page):
 
     try:
         page.wait_for_url(re.compile(r"atlas\.urbanpiper\.com/(?!login)"), timeout=45000)
+        print(f"DIAG: reached atlas.urbanpiper.com, url={page.url}")
     except Exception as e:
         print(f"DIAG: stuck waiting for the atlas redirect. Current URL: {page.url}")
         try:
@@ -186,20 +190,29 @@ def login_and_get_token(page):
         raise
 
     page.goto("https://atlas.urbanpiper.com/locations", wait_until="networkidle", timeout=60000)
+    print(f"DIAG: after goto(locations), url={page.url}, graphql requests seen so far: {len(seen)}")
     for _ in range(40):
         if token.get("value"):
             return token["value"]
         page.wait_for_timeout(1000)
+    print(f"DIAG: after first 40s wait, graphql requests seen: {len(seen)}, auths: {[a[:30] if a else a for a in seen[-10:]]}")
     # One more nudge: interact with the page (a real user click), in case the locations
     # list only actually requests data once something on the page is touched.
     try:
         page.reload(wait_until="networkidle", timeout=30000)
-    except Exception:
-        pass
+        print(f"DIAG: reloaded, url={page.url}")
+    except Exception as e:
+        print(f"DIAG: reload failed: {e}")
     for _ in range(15):
         if token.get("value"):
             return token["value"]
         page.wait_for_timeout(1000)
+    print(f"DIAG: final graphql requests seen: {len(seen)}, auths: {[a[:30] if a else a for a in seen[-10:]]}")
+    try:
+        page.screenshot(path="atlas_no_token.png", full_page=True)
+        print("DIAG: saved screenshot to atlas_no_token.png")
+    except Exception:
+        pass
     raise RuntimeError("Signed in but never saw an authenticated request to the locations API")
 
 

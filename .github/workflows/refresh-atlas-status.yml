@@ -38,4 +38,5 @@ jobs:
             atlas_login_stuck.png
             atlas_business_page.png
             atlas_app_picker.png
+            atlas_no_token.png
           if-no-files-found: ignore
