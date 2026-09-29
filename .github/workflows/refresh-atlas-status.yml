@@ -1,0 +1,31 @@
+name: Refresh Atlas platform status
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: refresh-atlas-status
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+      - name: Log in to Atlas and upload every outlet's platform status
+        env:
+          ATLAS_EMAIL: ${{ secrets.ATLAS_EMAIL }}
+          ATLAS_PASSWORD: ${{ secrets.ATLAS_PASSWORD }}
+          INGEST_URL: ${{ secrets.INGEST_URL }}
+          INGEST_KEY: ${{ secrets.INGEST_KEY }}
+        run: python refresh_atlas_status.py
