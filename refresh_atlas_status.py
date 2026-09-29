@@ -72,7 +72,11 @@ def login_and_get_token(page):
     def on_request(req):
         if GRAPHQL_URL in req.url:
             auth = req.headers.get("authorization")
-            if auth:
+            # Before login completes the app fires GraphQL calls with a literal
+            # "authorization: null" placeholder header - confirmed live in a failed
+            # run (token came back as the 4-character string "null"). Only a real
+            # bearer token is worth keeping.
+            if auth and auth.lower().startswith("bearer "):
                 token["value"] = auth
 
     page.on("request", on_request)
