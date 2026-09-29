@@ -130,8 +130,13 @@ def login_and_get_token(page):
                 print("DIAG: saved screenshot to atlas_business_page.png")
             except Exception:
                 pass
-    except Exception:
-        pass  # no business picker shown for this account
+    except Exception as e:
+        print(f"DIAG: business-picker step raised before finding the tile: {e}")
+        try:
+            page.screenshot(path="atlas_business_page.png", full_page=True)
+            print("DIAG: saved screenshot to atlas_business_page.png")
+        except Exception:
+            pass
 
     # After picking the business there can be a second confirm tile with the same name
     # (now on login.urbanpiper.com/business/<id>) before the real redirect to Atlas.
