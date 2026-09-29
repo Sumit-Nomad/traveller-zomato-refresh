@@ -136,6 +136,15 @@ def login_and_get_token(page):
     except Exception:
         pass  # no business picker shown for this account
 
+    # After picking the business there can be a second confirm tile with the same name
+    # (now on login.urbanpiper.com/business/<id>) before the real redirect to Atlas.
+    try:
+        confirm = page.get_by_role("button", name="Nomad By UrbanPiper")
+        confirm.wait_for(state="visible", timeout=8000)
+        confirm.click()
+    except Exception:
+        pass
+
     try:
         page.wait_for_url(re.compile(r"atlas\.urbanpiper\.com/(?!login)"), timeout=45000)
     except Exception as e:
