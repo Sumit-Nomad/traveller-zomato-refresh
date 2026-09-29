@@ -107,12 +107,32 @@ def login_and_get_token(page):
         if error_texts:
             print(f"DIAG: possible error message(s) on page: {error_texts}")
 
-    # Screen 3 (if shown): pick which business/outlet group to sign in as.
+    # Screen 3 (if shown): pick which business/outlet group to sign in as. The tile might not
+    # be a <button> - try several element types and text variants before giving up.
     try:
         page.wait_for_url(re.compile(r"login\.urbanpiper\.com/business"), timeout=15000)
-        tile = page.locator('button:has-text("Nomad by UrbanPiper")').first
-        tile.wait_for(state="visible", timeout=15000)
-        tile.click()
+        page.wait_for_timeout(2000)  # let the business list finish loading in
+        tile = page.locator(
+            'button:has-text("Nomad by UrbanPiper"), '
+            'a:has-text("Nomad by UrbanPiper"), '
+            '[role="button"]:has-text("Nomad by UrbanPiper"), '
+            'div:has-text("Nomad by UrbanPiper"):not(:has(div:has-text("Nomad by UrbanPiper")))'
+        ).first
+        try:
+            tile.wait_for(state="visible", timeout=15000)
+            tile.click()
+        except Exception as e:
+            print(f"DIAG: could not find/click the 'Nomad by UrbanPiper' tile ({e})")
+            try:
+                all_text = page.locator('body').inner_text()
+                print(f"DIAG: business-page text: {all_text[:1500]!r}")
+            except Exception:
+                pass
+            try:
+                page.screenshot(path="atlas_business_page.png", full_page=True)
+                print("DIAG: saved screenshot to atlas_business_page.png")
+            except Exception:
+                pass
     except Exception:
         pass  # no business picker shown for this account
 

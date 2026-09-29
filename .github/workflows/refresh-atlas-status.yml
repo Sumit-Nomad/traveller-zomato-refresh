@@ -34,5 +34,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: atlas-login-diagnostics
-          path: atlas_login_stuck.png
+          path: |
+            atlas_login_stuck.png
+            atlas_business_page.png
           if-no-files-found: ignore
