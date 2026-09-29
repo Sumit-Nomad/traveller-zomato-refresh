@@ -97,7 +97,7 @@ def login_and_get_token(page):
     # Screen 3 (if shown): pick which business/outlet group to sign in as.
     try:
         page.wait_for_url(re.compile(r"login\.urbanpiper\.com/business"), timeout=15000)
-        tile = page.locator('button:has-text("Nomad")').first
+        tile = page.locator('button:has-text("Nomad by UrbanPiper")').first
         tile.wait_for(state="visible", timeout=15000)
         tile.click()
     except Exception:
