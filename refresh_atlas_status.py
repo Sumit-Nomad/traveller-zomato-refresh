@@ -180,7 +180,7 @@ def login_and_get_token(page):
             # finish establishing the session before redirecting itself - confirmed live:
             # forcing our own navigation here interrupted that handshake and bounced back
             # to login. Let it finish and navigate on its own instead of racing it.
-            page.wait_for_url(re.compile(r"atlas\.urbanpiper\.com/(?!auth-service)"), timeout=30000)
+            page.wait_for_url(re.compile(r"atlas\.urbanpiper\.com/(?!auth-service)"), timeout=60000)
             print(f"DIAG: auth-service handshake finished, url={page.url}")
     except Exception as e:
         print(f"DIAG: stuck waiting for the atlas redirect. Current URL: {page.url}")
