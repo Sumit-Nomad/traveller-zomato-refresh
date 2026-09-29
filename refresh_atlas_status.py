@@ -103,7 +103,22 @@ def login_and_get_token(page):
     except Exception:
         pass  # no business picker shown for this account
 
-    page.wait_for_url(re.compile(r"atlas\.urbanpiper\.com/(?!login)"), timeout=45000)
+    try:
+        page.wait_for_url(re.compile(r"atlas\.urbanpiper\.com/(?!login)"), timeout=45000)
+    except Exception as e:
+        print(f"DIAG: stuck waiting for the atlas redirect. Current URL: {page.url}")
+        try:
+            print(f"DIAG: page title: {page.title()!r}")
+            print(f"DIAG: visible buttons: {[b.inner_text()[:60] for b in page.locator('button').all()[:15]]}")
+        except Exception as diag_e:
+            print(f"DIAG: could not inspect page: {diag_e}")
+        try:
+            page.screenshot(path="atlas_login_stuck.png", full_page=True)
+            print("DIAG: saved screenshot to atlas_login_stuck.png")
+        except Exception as shot_e:
+            print(f"DIAG: could not screenshot: {shot_e}")
+        raise
+
     page.goto("https://atlas.urbanpiper.com/locations", wait_until="networkidle", timeout=60000)
     for _ in range(20):
         if token.get("value"):
