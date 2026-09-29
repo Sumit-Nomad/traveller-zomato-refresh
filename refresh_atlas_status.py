@@ -64,7 +64,9 @@ def fail(message):
 
 
 def login_and_get_token(page):
-    """Sign in with email + password, capture the bearer token Atlas sends to its own API."""
+    """Sign in with email + password, then (if shown) pick the business, and capture
+    the bearer token Atlas sends to its own API. UrbanPiper's login is a few separate
+    screens (identifier, then password, then sometimes a business picker), not one form."""
     token = {}
 
     def on_request(req):
@@ -74,11 +76,33 @@ def login_and_get_token(page):
                 token["value"] = auth
 
     page.on("request", on_request)
-    page.goto("https://atlas.urbanpiper.com/login", wait_until="domcontentloaded", timeout=60000)
-    page.fill('input[type="email"], input[name="email"]', os.environ["ATLAS_EMAIL"])
-    pw = page.locator('input[type="password"], input[name="password"]')
-    pw.fill(os.environ["ATLAS_PASSWORD"])
-    pw.press("Enter")
+
+    # Screen 1: email/mobile identifier (a bare text box, no type="email"/name="email").
+    page.goto("https://login.urbanpiper.com/login/email-mobile/?redirect=atlas",
+              wait_until="domcontentloaded", timeout=60000)
+    email_box = page.locator('input[placeholder*="example.com"], input[type="text"]').first
+    email_box.wait_for(state="visible", timeout=30000)
+    email_box.fill(os.environ["ATLAS_EMAIL"])
+    email_box.press("Enter")
+
+    # Screen 2 (if shown): password - only when the identifier isn't already signed in.
+    pw = page.locator('input[type="password"]').first
+    try:
+        pw.wait_for(state="visible", timeout=15000)
+        pw.fill(os.environ["ATLAS_PASSWORD"])
+        pw.press("Enter")
+    except Exception:
+        pass  # already authenticated from a saved session on this runner - straight to the next screen
+
+    # Screen 3 (if shown): pick which business/outlet group to sign in as.
+    try:
+        page.wait_for_url(re.compile(r"login\.urbanpiper\.com/business"), timeout=15000)
+        tile = page.locator('button:has-text("Nomad")').first
+        tile.wait_for(state="visible", timeout=15000)
+        tile.click()
+    except Exception:
+        pass  # no business picker shown for this account
+
     page.wait_for_url(re.compile(r"atlas\.urbanpiper\.com/(?!login)"), timeout=45000)
     page.goto("https://atlas.urbanpiper.com/locations", wait_until="networkidle", timeout=60000)
     for _ in range(20):
