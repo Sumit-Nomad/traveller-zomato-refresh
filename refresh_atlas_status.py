@@ -186,10 +186,20 @@ def login_and_get_token(page):
         raise
 
     page.goto("https://atlas.urbanpiper.com/locations", wait_until="networkidle", timeout=60000)
-    for _ in range(20):
+    for _ in range(40):
         if token.get("value"):
             return token["value"]
-        page.wait_for_timeout(500)
+        page.wait_for_timeout(1000)
+    # One more nudge: interact with the page (a real user click), in case the locations
+    # list only actually requests data once something on the page is touched.
+    try:
+        page.reload(wait_until="networkidle", timeout=30000)
+    except Exception:
+        pass
+    for _ in range(15):
+        if token.get("value"):
+            return token["value"]
+        page.wait_for_timeout(1000)
     raise RuntimeError("Signed in but never saw an authenticated request to the locations API")
 
 
