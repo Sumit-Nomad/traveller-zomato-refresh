@@ -94,11 +94,15 @@ def login_and_get_token(page):
         pw = None  # already authenticated from a saved session on this runner - straight to the next screen
     if pw is not None:
         pw.fill(os.environ["ATLAS_PASSWORD"])
-        login_btn = page.locator('button:text-is("Login")').first
-        login_btn.wait_for(state="visible", timeout=10000)
-        login_btn.click()
+        login_btn = page.get_by_role("button", name="Login", exact=True)
+        try:
+            login_btn.wait_for(state="visible", timeout=25000)
+            login_btn.click()
+        except Exception as e:
+            print(f"DIAG: could not click the Login button ({e}); pressing Enter instead")
+            pw.press("Enter")
         page.wait_for_timeout(3000)
-        print(f"DIAG: after clicking Login, url={page.url}")
+        print(f"DIAG: after submitting the password, url={page.url}")
         error_texts = page.locator('text=/incorrect|invalid|error|wrong/i').all_inner_texts()
         if error_texts:
             print(f"DIAG: possible error message(s) on page: {error_texts}")
