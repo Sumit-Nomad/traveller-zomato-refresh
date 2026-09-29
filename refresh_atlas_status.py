@@ -217,6 +217,10 @@ def fetch_all_stores(page, token):
         if result["status"] != 200:
             raise RuntimeError(f"Atlas API returned HTTP {result['status']}: {result['text'][:300]}")
         data = json.loads(result["text"])
+        if data.get("errors"):
+            raise RuntimeError(f"Atlas API returned GraphQL errors: {json.dumps(data['errors'])[:500]}")
+        if not offset:
+            print(f"DIAG: first page raw response: {result['text'][:500]}")
         block = (data.get("data") or {}).get("stores") or {}
         objects = block.get("objects") or []
         stores.extend(objects)
@@ -269,6 +273,7 @@ def main():
         except Exception as e:  # noqa: BLE001
             browser.close()
             return fail(f"Atlas login failed: {e}")
+        print(f"DIAG: got a token (len={len(token)}, starts={token[:20]!r}); page is now at {page.url}")
         try:
             stores = fetch_all_stores(page, token)
         except Exception as e:  # noqa: BLE001
