@@ -190,19 +190,33 @@ def login_and_get_token(page):
 
 
 def fetch_all_stores(page, token):
+    # Call the GraphQL API as an in-page fetch() (so it carries the page's real Origin,
+    # Referer and cookies) rather than Playwright's separate page.request client, which
+    # sends a bare HTTP request with only the headers we set and got back 0 results.
     stores, offset = [], 0
     while True:
-        resp = page.request.post(GRAPHQL_URL, headers={"authorization": token, "content-type": "application/json"},
-                                  data=json.dumps({
-                                      "operationName": "getLocationsList",
-                                      "variables": {"limit": PAGE_SIZE, "offset": offset,
-                                                    "filters": [{"field": "is_active", "value": "true"}],
-                                                    "sort": {"field": "name", "order": "ASC"}},
-                                      "query": LOCATIONS_QUERY,
-                                  }))
-        if resp.status != 200:
-            raise RuntimeError(f"Atlas API returned HTTP {resp.status}")
-        data = resp.json()
+        result = page.evaluate(
+            """async ({url, token, query, variables}) => {
+                const r = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'authorization': token, 'content-type': 'application/json' },
+                    body: JSON.stringify({ operationName: 'getLocationsList', variables, query }),
+                });
+                const text = await r.text();
+                return { status: r.status, text };
+            }""",
+            {
+                "url": GRAPHQL_URL,
+                "token": token,
+                "query": LOCATIONS_QUERY,
+                "variables": {"limit": PAGE_SIZE, "offset": offset,
+                              "filters": [{"field": "is_active", "value": "true"}],
+                              "sort": {"field": "name", "order": "ASC"}},
+            },
+        )
+        if result["status"] != 200:
+            raise RuntimeError(f"Atlas API returned HTTP {result['status']}: {result['text'][:300]}")
+        data = json.loads(result["text"])
         block = (data.get("data") or {}).get("stores") or {}
         objects = block.get("objects") or []
         stores.extend(objects)
@@ -213,7 +227,14 @@ def fetch_all_stores(page, token):
 
 
 def build_rows(stores, ref_map):
-    """-> {platform: [[brand, outlet, ref, state, text], ...]} for refs we track."""
+    """-> {platform: [[brand, outlet, ref, state, text], ...]} for refs we track.
+
+    The API returns `state` as a numeric code, not a word - confirmed live against the
+    real Atlas account: "1" = enabled/online, "0" = disabled/offline. Other codes ("2",
+    "3", ...) turned up on the large majority of locations for platforms they are not
+    actually onboarded to (dine-in-only outlets showing an "urbanpiper"/"dotpe" code,
+    for example) - their meaning isn't confirmed, so those rows are skipped rather than
+    guessed at, and the outlet just falls back to its other status sources."""
     out = {}
     for s in stores:
         loc = ref_map.get(s.get("merchantRefId"))
@@ -221,10 +242,10 @@ def build_rows(stores, ref_map):
             continue
         for lp in s.get("locationPlatforms") or []:
             platform = (lp.get("platformName") or "").strip()
-            state = (lp.get("state") or "").lower()
-            if not platform or state not in ("enabled", "disabled"):
+            state = str(lp.get("state") if lp.get("state") is not None else "")
+            if not platform or state not in ("0", "1"):
                 continue
-            online = state == "enabled"
+            online = state == "1"
             out.setdefault(platform, []).append([
                 loc["brand"], loc["store"], s["merchantRefId"],
                 "live" if online else "closed",
