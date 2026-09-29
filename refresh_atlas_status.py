@@ -86,11 +86,12 @@ def login_and_get_token(page):
     email_box.press("Enter")
 
     # Screen 2 (if shown): password - only when the identifier isn't already signed in.
+    # Enter does not submit this form; there is a separate "Login" button.
     pw = page.locator('input[type="password"]').first
     try:
         pw.wait_for(state="visible", timeout=15000)
         pw.fill(os.environ["ATLAS_PASSWORD"])
-        pw.press("Enter")
+        page.locator('button:text-is("Login")').first.click()
     except Exception:
         pass  # already authenticated from a saved session on this runner - straight to the next screen
 
