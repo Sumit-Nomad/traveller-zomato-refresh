@@ -111,15 +111,12 @@ def login_and_get_token(page):
     # be a <button> - try several element types and text variants before giving up.
     try:
         page.wait_for_url(re.compile(r"login\.urbanpiper\.com/business"), timeout=15000)
-        page.wait_for_timeout(2000)  # let the business list finish loading in
-        tile = page.locator(
-            'button:has-text("Nomad by UrbanPiper"), '
-            'a:has-text("Nomad by UrbanPiper"), '
-            '[role="button"]:has-text("Nomad by UrbanPiper"), '
-            'div:has-text("Nomad by UrbanPiper"):not(:has(div:has-text("Nomad by UrbanPiper")))'
-        ).first
+        # "Your active businesses (N)" loads in after the page shell - wait for the list itself,
+        # not just a fixed delay, since the API call behind it is sometimes slow.
+        page.get_by_text("Your active businesses", exact=False).wait_for(state="visible", timeout=30000)
+        tile = page.get_by_text("Nomad by UrbanPiper", exact=False).first
         try:
-            tile.wait_for(state="visible", timeout=15000)
+            tile.wait_for(state="visible", timeout=30000)
             tile.click()
         except Exception as e:
             print(f"DIAG: could not find/click the 'Nomad by UrbanPiper' tile ({e})")
