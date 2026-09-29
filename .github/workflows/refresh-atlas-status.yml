@@ -37,4 +37,5 @@ jobs:
           path: |
             atlas_login_stuck.png
             atlas_business_page.png
+            atlas_app_picker.png
           if-no-files-found: ignore

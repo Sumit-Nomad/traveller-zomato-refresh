@@ -107,17 +107,28 @@ def login_and_get_token(page):
         if error_texts:
             print(f"DIAG: possible error message(s) on page: {error_texts}")
 
-    # Screen 3 (if shown): pick which business/outlet group to sign in as. The tile might not
-    # be a <button> - try several element types and text variants before giving up.
+    # Screen 3 (if shown): pick which business/outlet group to sign in as. This is a real
+    # <button role> named "Nomad by UrbanPiper. Roles: Admin, Administrator" inside a
+    # <ul role="list">, confirmed by inspecting the live page - use that exact semantic.
     try:
         page.wait_for_url(re.compile(r"login\.urbanpiper\.com/business"), timeout=15000)
         # "Your active businesses (N)" loads in after the page shell - wait for the list itself,
         # not just a fixed delay, since the API call behind it is sometimes slow.
         page.get_by_text("Your active businesses", exact=False).wait_for(state="visible", timeout=30000)
-        tile = page.get_by_text("Nomad by UrbanPiper", exact=False).first
+        tile = page.get_by_role("button", name="Nomad by UrbanPiper").first
         try:
             tile.wait_for(state="visible", timeout=30000)
-            tile.click()
+            tile.scroll_into_view_if_needed()
+            tile.hover()
+            tile.click(timeout=10000)
+            page.wait_for_timeout(1500)
+            print(f"DIAG: after clicking the tile, url={page.url}")
+            if page.url.rstrip("/").endswith("/business"):
+                # Click landed but nothing moved - try once more with a forced click.
+                print("DIAG: url did not change after the first click; trying a forced click")
+                tile.click(force=True, timeout=10000)
+                page.wait_for_timeout(1500)
+                print(f"DIAG: after the forced click, url={page.url}")
         except Exception as e:
             print(f"DIAG: could not find/click the 'Nomad by UrbanPiper' tile ({e})")
             try:
@@ -138,14 +149,21 @@ def login_and_get_token(page):
         except Exception:
             pass
 
-    # After picking the business there can be a second confirm tile with the same name
-    # (now on login.urbanpiper.com/business/<id>) before the real redirect to Atlas.
+    # After picking the business (now on login.urbanpiper.com/business/<id>) there is an
+    # app picker - "Atlas" vs "Prime" - confirmed live. The business name is ALSO repeated
+    # as a "Back to business selection" button on this screen; clicking that instead (an
+    # earlier, wrong assumption) just bounced back to the business list forever.
     try:
-        confirm = page.get_by_role("button", name="Nomad By UrbanPiper")
-        confirm.wait_for(state="visible", timeout=8000)
-        confirm.click()
-    except Exception:
-        pass
+        atlas_app = page.get_by_role("button", name="Atlas", exact=False)
+        atlas_app.wait_for(state="visible", timeout=15000)
+        atlas_app.click()
+    except Exception as e:
+        print(f"DIAG: could not find/click the 'Atlas' app tile ({e})")
+        try:
+            page.screenshot(path="atlas_app_picker.png", full_page=True)
+            print("DIAG: saved screenshot to atlas_app_picker.png")
+        except Exception:
+            pass
 
     try:
         page.wait_for_url(re.compile(r"atlas\.urbanpiper\.com/(?!login)"), timeout=45000)
